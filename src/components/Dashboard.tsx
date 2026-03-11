@@ -17,6 +17,16 @@ import {
 import { useAppStore } from '../store';
 import { calculateAnnualTotal, calculateProjections, calculateYoYGrowth, formatCurrency, formatPercent, MONTHS } from '../utils';
 
+const CHART_COLORS = [
+  '#6366f1', // indigo
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#ec4899', // pink
+  '#8b5cf6', // violet
+  '#14b8a6', // teal
+  '#ef4444', // red
+];
+
 export function Dashboard() {
   const { state } = useAppStore();
   const { years, salesData, companyInfo, goals } = state;
@@ -34,19 +44,27 @@ export function Dashboard() {
     });
   }, [years, salesData]);
 
-  const annualData = useMemo(() => {
-    return years.map((year, index) => {
-      const total = calculateAnnualTotal(salesData[year]);
-      let growth = 0;
-      if (index > 0) {
-        const prevTotal = calculateAnnualTotal(salesData[years[index - 1]]);
-        growth = calculateYoYGrowth(total, prevTotal) || 0;
-      }
-      return {
-        year: year.toString(),
-        total,
-        growth: growth * 100, // Convert to percentage for chart
-      };
+  const ytdData = useMemo(() => {
+    return MONTHS.map((month, index) => {
+      const dataPoint: any = { name: month.substring(0, 3) };
+      years.forEach((year) => {
+        let lastDataIndex = -1;
+        for (let i = 11; i >= 0; i--) {
+          if (salesData[year]?.[i] !== null && salesData[year]?.[i] !== undefined) {
+            lastDataIndex = i;
+            break;
+          }
+        }
+        
+        if (index <= lastDataIndex) {
+          let sum = 0;
+          for (let i = 0; i <= index; i++) {
+            sum += salesData[year]?.[i] || 0;
+          }
+          dataPoint[year] = sum;
+        }
+      });
+      return dataPoint;
     });
   }, [years, salesData]);
 
@@ -80,89 +98,36 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Gráfico de Ventas Mensuales */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-zinc-200 lg:col-span-2">
-          <h3 className="text-lg font-semibold text-zinc-900 mb-6">Comparativa Mensual</h3>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} dy={10} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#71717a', fontSize: 12 }}
-                  tickFormatter={(value) => `${companyInfo.currency === 'USD' ? '$' : companyInfo.currency === 'EUR' ? '€' : '$'}${(value / 1000).toFixed(0)}k`}
-                  dx={-10}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-zinc-200">
+        <h3 className="text-lg font-semibold text-zinc-900 mb-6">Comparativa Mensual</h3>
+        <div className="h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={monthlyData} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} dy={10} />
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: '#71717a', fontSize: 12 }}
+                tickFormatter={(value) => `${companyInfo.currency === 'USD' ? '$' : companyInfo.currency === 'EUR' ? '€' : '$'}${(value / 1000).toFixed(0)}k`}
+                dx={-10}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+              {years.map((year, index) => (
+                <Line
+                  key={year}
+                  type="monotone"
+                  dataKey={year}
+                  name={year.toString()}
+                  stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                  strokeWidth={3}
+                  dot={{ r: 4, strokeWidth: 2 }}
+                  activeDot={{ r: 6 }}
                 />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                {years.map((year, index) => (
-                  <Line
-                    key={year}
-                    type="monotone"
-                    dataKey={year}
-                    name={year.toString()}
-                    stroke={index === years.length - 1 ? '#18181b' : index === years.length - 2 ? '#a1a1aa' : '#e4e4e7'}
-                    strokeWidth={index === years.length - 1 ? 3 : 2}
-                    dot={{ r: 4, strokeWidth: 2 }}
-                    activeDot={{ r: 6 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          {/* Gráfico de Totales Anuales */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-zinc-200">
-            <h3 className="text-lg font-semibold text-zinc-900 mb-6">Totales Anuales</h3>
-            <div className="h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={annualData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
-                  <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 10 }} dy={5} />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#71717a', fontSize: 10 }}
-                    tickFormatter={(value) => `${companyInfo.currency === 'USD' ? '$' : companyInfo.currency === 'EUR' ? '€' : '$'}${(value / 1000).toFixed(0)}k`}
-                    width={40}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f4f4f5' }} />
-                  <Bar dataKey="total" name="Total Ventas" fill="#18181b" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Gráfico de Crecimiento Anual */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-zinc-200">
-            <h3 className="text-lg font-semibold text-zinc-900 mb-6">Crecimiento Anual</h3>
-            <div className="h-32">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={annualData.slice(1)} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e7" />
-                  <XAxis dataKey="year" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 10 }} dy={5} />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#71717a', fontSize: 10 }}
-                    tickFormatter={(value) => `${value.toFixed(0)}%`}
-                    width={40}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f4f4f5' }} />
-                  <Bar dataKey="growth" name="Crecimiento" radius={[4, 4, 0, 0]} maxBarSize={40}>
-                    {annualData.slice(1).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.growth >= 0 ? '#10b981' : '#ef4444'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 

@@ -36,9 +36,9 @@ export function calculateAnnualTotal(sales: { [month: number]: number | null }) 
 
 export function calculateMonthlyAverage(sales: { [month: number]: number | null }) {
   if (!sales) return 0;
-  const values = Object.values(sales).filter((v) => v !== null && v > 0);
+  const values = Object.values(sales).filter((v) => v !== null && v !== undefined && !isNaN(Number(v)) && Number(v) > 0);
   if (values.length === 0) return 0;
-  const sum = values.reduce((s, v) => (s || 0) + (v || 0), 0) || 0;
+  const sum = values.reduce((s, v) => (s || 0) + (Number(v) || 0), 0) || 0;
   return sum / values.length;
 }
 
@@ -61,20 +61,32 @@ export function calculateProjections(
   currentYearSales: { [month: number]: number | null },
   previousYearSales: { [month: number]: number | null } | undefined
 ) {
-  // Find the last month with data
+  // Find the last month with data (ignore trailing nulls, undefined, 0s, or NaNs)
   let lastMonthWithData = -1;
   for (let i = 11; i >= 0; i--) {
-    if (currentYearSales[i] !== null && currentYearSales[i] !== undefined) {
+    const val = currentYearSales[i];
+    if (val !== null && val !== undefined && !isNaN(Number(val)) && Number(val) !== 0 && (val as any) !== '') {
       lastMonthWithData = i;
       break;
     }
   }
 
-  const currentMonthIndex = lastMonthWithData >= 0 ? lastMonthWithData : 0;
+  // If no data at all for the current year
+  if (lastMonthWithData === -1) {
+    const prevTotal = previousYearSales ? calculateAnnualTotal(previousYearSales) : 0;
+    return {
+      conservative: prevTotal * 0.9,
+      realistic: prevTotal,
+      aggressive: prevTotal * 1.15,
+    };
+  }
+
+  const currentMonthIndex = lastMonthWithData;
   const ytd = calculateYTD(currentYearSales, currentMonthIndex);
   const remainingMonths = 11 - currentMonthIndex;
   
-  if (remainingMonths === 0 || lastMonthWithData === -1) {
+  // If year is fully closed
+  if (remainingMonths === 0) {
     return {
       conservative: ytd,
       realistic: ytd,
@@ -88,10 +100,15 @@ export function calculateProjections(
   let conservativeRemaining = 0;
   if (previousYearSales) {
     for (let i = currentMonthIndex + 1; i < 12; i++) {
-      conservativeRemaining += previousYearSales[i] || 0;
+      const prevVal = previousYearSales[i];
+      conservativeRemaining += (prevVal !== null && prevVal !== undefined && !isNaN(Number(prevVal))) ? Number(prevVal) : 0;
+    }
+    // If previous year remaining was 0, fallback to average
+    if (conservativeRemaining === 0) {
+      conservativeRemaining = currentMonthlyAverage * remainingMonths * 0.9;
     }
   } else {
-    conservativeRemaining = currentMonthlyAverage * remainingMonths;
+    conservativeRemaining = currentMonthlyAverage * remainingMonths * 0.9;
   }
 
   // Realistic: Assume remaining months will be like current year's average

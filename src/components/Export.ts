@@ -42,8 +42,7 @@ export function exportToPDF(state: AppState) {
   const tableHead = [
     'Mes', 
     ...years.map(y => y.toString()), 
-    years.length > 1 ? `Vs. ${years[years.length - 2]} ($)` : 'Vs. Año Anterior ($)', 
-    years.length > 1 ? `Vs. ${years[years.length - 2]} (%)` : 'Vs. Año Anterior (%)'
+    ...years.slice(1).map((y, i) => `Vs. ${years[i]}`)
   ];
   const tableBody = MONTHS.map((month, index) => {
     const row = [month];
@@ -52,26 +51,20 @@ export function exportToPDF(state: AppState) {
       row.push(val !== null ? formatCurrency(val, companyInfo.currency) : '-');
     });
     
-    // YoY Growth & Diff
-    if (years.length >= 2) {
-      const currentYear = years[years.length - 1];
-      const prevYear = years[years.length - 2];
-      const currentVal = salesData[currentYear]?.[index];
+    years.slice(1).forEach((year, i) => {
+      const prevYear = years[i];
+      const currentVal = salesData[year]?.[index];
       const prevVal = salesData[prevYear]?.[index];
       
       if (currentVal !== null && currentVal !== undefined && prevVal !== null && prevVal !== undefined) {
         const diff = currentVal - prevVal;
-        row.push(formatCurrency(diff, companyInfo.currency));
+        const growth = calculateYoYGrowth(currentVal, prevVal);
+        const growthStr = growth !== null ? ` (${growth > 0 ? '+' : ''}${formatPercent(growth)})` : '';
+        row.push(`${diff > 0 ? '+' : ''}${formatCurrency(diff, companyInfo.currency)}${growthStr}`);
       } else {
         row.push('-');
       }
-      
-      const growth = calculateYoYGrowth(currentVal, prevVal);
-      row.push(growth !== null ? formatPercent(growth) : '-');
-    } else {
-      row.push('-');
-      row.push('-');
-    }
+    });
     
     return row;
   });
@@ -82,19 +75,17 @@ export function exportToPDF(state: AppState) {
     totalsRow.push(formatCurrency(calculateAnnualTotal(salesData[year]), companyInfo.currency));
   });
   
-  if (years.length >= 2) {
-    const currentTotal = calculateAnnualTotal(salesData[years[years.length - 1]]);
-    const prevTotal = calculateAnnualTotal(salesData[years[years.length - 2]]);
+  years.slice(1).forEach((year, i) => {
+    const prevYear = years[i];
+    const currentTotal = calculateAnnualTotal(salesData[year]);
+    const prevTotal = calculateAnnualTotal(salesData[prevYear]);
     
     const diff = currentTotal - prevTotal;
-    totalsRow.push(formatCurrency(diff, companyInfo.currency));
-    
     const growth = calculateYoYGrowth(currentTotal, prevTotal);
-    totalsRow.push(growth !== null ? formatPercent(growth) : '-');
-  } else {
-    totalsRow.push('-');
-    totalsRow.push('-');
-  }
+    const growthStr = growth !== null ? ` (${growth > 0 ? '+' : ''}${formatPercent(growth)})` : '';
+    
+    totalsRow.push(`${diff > 0 ? '+' : ''}${formatCurrency(diff, companyInfo.currency)}${growthStr}`);
+  });
   
   tableBody.push(totalsRow);
 
@@ -129,8 +120,7 @@ export function exportToExcel(state: AppState) {
   const headerRow = [
     'Mes', 
     ...years.map(y => y.toString()), 
-    years.length > 1 ? `Vs. ${years[years.length - 2]} ($)` : 'Vs. Año Anterior ($)', 
-    years.length > 1 ? `Vs. ${years[years.length - 2]} (%)` : 'Vs. Año Anterior (%)'
+    ...years.slice(1).map((y, i) => `Vs. ${years[i]}`)
   ];
   salesSheetData.push(headerRow);
 
@@ -140,24 +130,20 @@ export function exportToExcel(state: AppState) {
       row.push(salesData[year]?.[index] || 0);
     });
     
-    if (years.length >= 2) {
-      const currentYear = years[years.length - 1];
-      const prevYear = years[years.length - 2];
-      const currentVal = salesData[currentYear]?.[index];
+    years.slice(1).forEach((year, i) => {
+      const prevYear = years[i];
+      const currentVal = salesData[year]?.[index];
       const prevVal = salesData[prevYear]?.[index];
       
       if (currentVal !== null && currentVal !== undefined && prevVal !== null && prevVal !== undefined) {
-        row.push(currentVal - prevVal);
+        const diff = currentVal - prevVal;
+        const growth = calculateYoYGrowth(currentVal, prevVal);
+        const growthStr = growth !== null ? ` (${growth > 0 ? '+' : ''}${formatPercent(growth)})` : '';
+        row.push(`${diff > 0 ? '+' : ''}${formatCurrency(diff, companyInfo.currency)}${growthStr}`);
       } else {
         row.push('');
       }
-      
-      const growth = calculateYoYGrowth(currentVal, prevVal);
-      row.push(growth !== null ? growth : '');
-    } else {
-      row.push('');
-      row.push('');
-    }
+    });
     salesSheetData.push(row);
   });
 
